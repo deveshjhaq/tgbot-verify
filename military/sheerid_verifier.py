@@ -8,7 +8,9 @@ import logging
 import httpx
 import uuid
 import time
-from typing import Dict, Optional, Tuple
+import os
+from pathlib import Path
+from typing import Dict, Optional, Tuple, Set
 
 from . import config
 from .name_generator import (
@@ -28,6 +30,70 @@ logging.basicConfig(
     datefmt='%H:%M:%S'
 )
 logger = logging.getLogger(__name__)
+
+
+# File to store used veteran data (persistent across sessions)
+USED_DATA_FILE = Path(__file__).parent / "used_veterans.txt"
+
+
+def load_used_data() -> Set[str]:
+    """Load previously used veteran combinations from file"""
+    used = set()
+    if USED_DATA_FILE.exists():
+        try:
+            with open(USED_DATA_FILE, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        used.add(line)
+            logger.info(f"📂 Loaded {len(used)} used veteran records")
+        except Exception as e:
+            logger.error(f"Error loading used data: {e}")
+    return used
+
+
+def save_used_data(combo_key: str):
+    """Save used veteran combination to file"""
+    try:
+        with open(USED_DATA_FILE, "a", encoding="utf-8") as f:
+            f.write(f"{combo_key}\n")
+        logger.info(f"💾 Saved used: {combo_key}")
+    except Exception as e:
+        logger.error(f"Error saving used data: {e}")
+
+
+def is_data_used(first_name: str, last_name: str, birth_date: str) -> bool:
+    """Check if veteran data has been used before"""
+    combo_key = f"{first_name}|{last_name}|{birth_date}"
+    used = load_used_data()
+    return combo_key in used
+
+
+def mark_data_used(first_name: str, last_name: str, birth_date: str):
+    """Mark veteran data as used"""
+    combo_key = f"{first_name}|{last_name}|{birth_date}"
+    save_used_data(combo_key)
+
+
+# Global cache for used data (loaded once per process)
+_global_used_data: Set[str] = None
+
+
+def get_global_used_data() -> Set[str]:
+    """Get global used data cache"""
+    global _global_used_data
+    if _global_used_data is None:
+        _global_used_data = load_used_data()
+    return _global_used_data
+
+
+def add_to_global_used(combo_key: str):
+    """Add to global cache and save to file"""
+    global _global_used_data
+    if _global_used_data is None:
+        _global_used_data = load_used_data()
+    _global_used_data.add(combo_key)
+    save_used_data(combo_key)
 
 
 # Error types that should trigger retry with different data
@@ -134,15 +200,21 @@ class SheerIDVerifier:
         return False
 
     def _get_fresh_data(self) -> Dict:
-        """Get fresh veteran data for retry (different from previous attempts)"""
+        """Get fresh veteran data for retry (different from previous attempts)
+        Uses global persistent cache to avoid reusing data across sessions
+        """
         from .veteran_data_scraper import get_veteran_for_verification
         
-        max_attempts = 10
+        # Get global used data (persistent across sessions)
+        global_used = get_global_used_data()
+        
+        max_attempts = 20
         for _ in range(max_attempts):
             veteran = get_veteran_for_verification()
             combo_key = f"{veteran['first_name']}|{veteran['last_name']}|{veteran['birth_date']}"
             
-            if combo_key not in self.used_combinations:
+            # Check both local session and global persistent cache
+            if combo_key not in self.used_combinations and combo_key not in global_used:
                 self.used_combinations.add(combo_key)
                 return veteran
         
@@ -169,6 +241,11 @@ class SheerIDVerifier:
     ) -> Dict:
         """Execute single verification attempt"""
         self.attempt_count += 1
+        
+        # Mark this data as used IMMEDIATELY (before API call)
+        # This prevents reuse even if verification fails
+        combo_key = f"{first_name}|{last_name}|{birth_date}"
+        add_to_global_used(combo_key)
         
         # Get organization from branch
         org = config.BRANCH_ORG_MAP.get(branch, config.BRANCH_ORG_MAP["Army"])
