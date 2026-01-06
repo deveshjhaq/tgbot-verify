@@ -241,6 +241,81 @@ def create_verification_from_token(access_token: str, program_id: str = None) ->
         return None
 
 
+def diagnose_token(token: str) -> Dict:
+    """
+    Diagnose ChatGPT token issues
+    Returns diagnostic info about the token
+    """
+    import json as json_module
+    
+    result = {
+        "valid": False,
+        "token_length": len(token),
+        "is_jwt": token.startswith("eyJ"),
+        "endpoints_status": {},
+        "error": None
+    }
+    
+    if not token.startswith("eyJ"):
+        result["error"] = "Token doesn't look like a JWT (should start with 'eyJ')"
+        return result
+    
+    logger.info("🔍 Diagnosing token...")
+    logger.info(f"   Token length: {len(token)}")
+    logger.info(f"   Token preview: {token[:50]}...")
+    
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "User-Agent": config.USER_AGENT,
+        "Accept": "application/json",
+    }
+    
+    # Test endpoints
+    test_endpoints = [
+        ("accounts_check", "https://chatgpt.com/backend-api/accounts/check", "GET"),
+        ("me", "https://chatgpt.com/backend-api/me", "GET"),
+        ("veterans_create", f"{config.CHATGPT_API}/veterans/create_verification", "POST"),
+    ]
+    
+    try:
+        with httpx.Client(timeout=15.0) as client:
+            for name, url, method in test_endpoints:
+                try:
+                    if method == "GET":
+                        resp = client.get(url, headers=headers)
+                    else:
+                        resp = client.post(url, headers=headers, json={"program_id": config.PROGRAM_ID})
+                    
+                    result["endpoints_status"][name] = {
+                        "status": resp.status_code,
+                        "ok": resp.status_code in [200, 201]
+                    }
+                    logger.info(f"   {name}: {resp.status_code}")
+                    
+                    if resp.status_code == 200 and name in ["accounts_check", "me"]:
+                        result["valid"] = True
+                        
+                except Exception as e:
+                    result["endpoints_status"][name] = {"status": "error", "error": str(e)}
+                    logger.error(f"   {name}: ERROR - {e}")
+                    
+    except Exception as e:
+        result["error"] = str(e)
+        
+    return result
+
+
+def test_token_quick(token: str) -> bool:
+    """Quick test if ChatGPT token is valid"""
+    try:
+        headers = {"Authorization": f"Bearer {token}", "User-Agent": config.USER_AGENT}
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get("https://chatgpt.com/backend-api/me", headers=headers)
+            return resp.status_code == 200
+    except:
+        return False
+
+
 def extract_access_token(input_str: str) -> Optional[str]:
     """
     Extract accessToken from various input formats:

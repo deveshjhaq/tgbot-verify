@@ -18,7 +18,9 @@ from Boltnew.sheerid_verifier import SheerIDVerifier as BoltnewVerifier
 from military.sheerid_verifier import (
     SheerIDVerifier as MilitaryVerifier,
     create_verification_from_token,
-    extract_access_token
+    extract_access_token,
+    diagnose_token,
+    test_token_quick
 )
 from utils.messages import get_insufficient_balance_message, get_verify_usage_message
 
@@ -627,9 +629,10 @@ async def getV4Code_command(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 async def verify6_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db: Database):
     """Handle /verify6 command - ChatGPT Military Verification
     
-    Supports two modes:
-    1. Auth Token mode: /verify6 <accessToken> (creates verification automatically)
-    2. SheerID Link mode: /verify6 <sheerid_link> (traditional mode)
+    Supports multiple modes:
+    1. SheerID Link mode: /verify6 <sheerid_link> (RECOMMENDED - most reliable)
+    2. Auth Token mode: /verify6 <accessToken> (may fail due to CloudFlare)
+    3. Diagnostic mode: /verify6 test <token> (test if token works)
     """
     user_id = update.effective_user.id
 
@@ -644,15 +647,61 @@ async def verify6_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
     if not context.args:
         await update.message.reply_text(
             "🎖️ **ChatGPT Military Verification**\n\n"
-            "**Method 1 (Recommended):** Auth Token\n"
-            "`/verify6 <accessToken>`\n\n"
-            "**Method 2:** SheerID Link\n"
-            "`/verify6 <SheerID_link>`\n\n"
-            "**How to get accessToken:**\n"
-            "1. Login to https://chatgpt.com\n"
-            "2. Go to https://chatgpt.com/api/auth/session\n"
-            "3. Copy the `accessToken` value\n\n"
+            "**Method 1 (RECOMMENDED):** SheerID Link\n"
+            "```\n/verify6 <SheerID_link>\n```\n\n"
+            "**How to get SheerID link:**\n"
+            "1. Go to https://chatgpt.com/veterans-claim\n"
+            "2. Click 'Verify my status'\n"
+            "3. Copy URL from browser (starts with services.sheerid.com)\n\n"
+            "**Method 2:** Auth Token (may not work)\n"
+            "```\n/verify6 <accessToken>\n```\n\n"
+            "**Test Token:**\n"
+            "```\n/verify6 test <accessToken>\n```\n\n"
             "This verification is for US Military Veterans.",
+            parse_mode="Markdown"
+        )
+        return
+
+    # Check for diagnostic/test mode
+    if context.args[0].lower() == "test" and len(context.args) > 1:
+        token_input = " ".join(context.args[1:])
+        access_token = extract_access_token(token_input)
+        
+        if not access_token:
+            await update.message.reply_text(
+                "❌ Could not extract token from input.\n"
+                "Token should start with 'eyJ...' (JWT format)"
+            )
+            return
+        
+        processing_msg = await update.message.reply_text(
+            "🔍 **Testing Token...**\n\n"
+            f"Token length: {len(access_token)}\n"
+            f"Preview: `{access_token[:30]}...`\n\n"
+            "⏳ Checking endpoints...",
+            parse_mode="Markdown"
+        )
+        
+        # Run diagnostic
+        diag_result = await asyncio.to_thread(diagnose_token, access_token)
+        
+        status_lines = []
+        for endpoint, info in diag_result.get("endpoints_status", {}).items():
+            status = info.get("status", "?")
+            ok = "✅" if info.get("ok") else "❌"
+            status_lines.append(f"{ok} {endpoint}: {status}")
+        
+        await processing_msg.edit_text(
+            "🔍 **Token Diagnostic Results**\n\n"
+            f"Token valid: {'✅ Yes' if diag_result['valid'] else '❌ No'}\n"
+            f"Token length: {diag_result['token_length']}\n"
+            f"Is JWT: {'✅' if diag_result['is_jwt'] else '❌'}\n\n"
+            "**Endpoint Status:**\n" + "\n".join(status_lines) + "\n\n" +
+            (f"⚠️ Error: {diag_result['error']}\n\n" if diag_result.get('error') else "") +
+            ("✅ Token works! You can use it for verification.\n" if diag_result['valid'] else 
+             "❌ Token not working. Get a fresh one from:\n"
+             "https://chatgpt.com/api/auth/session\n\n"
+             "Or use SheerID link method (recommended)."),
             parse_mode="Markdown"
         )
         return
@@ -668,69 +717,97 @@ async def verify6_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
     verification_id = None
     is_token_mode = False
     
-    # First, try to extract access token
-    access_token = extract_access_token(input_text)
-    
-    if access_token:
-        is_token_mode = True
-        # Token mode - create verification from token
-        processing_msg = await update.message.reply_text(
-            "🎖️ **ChatGPT Military Verification**\n\n"
-            "🔑 Auth token detected!\n"
-            "⏳ Creating verification from token...",
-            parse_mode="Markdown"
-        )
-        
-        # Create verification ID from token
-        verification_id = await asyncio.to_thread(
-            create_verification_from_token, access_token
-        )
-        
-        if not verification_id:
-            await processing_msg.edit_text(
-                "❌ **Failed to create verification from token**\n\n"
-                "🔒 ChatGPT API is CloudFlare protected.\n\n"
-                "**Alternative Method:**\n"
-                "1. Go to https://chatgpt.com/veterans-claim\n"
-                "2. Click 'Verify my status'\n"
-                "3. Copy the SheerID link that opens\n"
-                "4. Use: `/verify6 <sheerid_link>`\n\n"
-                "**SheerID link format:**\n"
-                "`https://services.sheerid.com/verify/...?verificationId=...`",
-                parse_mode="Markdown"
-            )
-            return
-        
-        await processing_msg.edit_text(
-            f"🎖️ **ChatGPT Military Verification**\n\n"
-            f"✅ Verification created from token!\n"
-            f"🆔 ID: `{verification_id[:20]}...`\n\n"
-            f"⏳ Starting verification process...",
-            parse_mode="Markdown"
-        )
-    else:
-        # Traditional mode - parse SheerID link
+    # First check if it's a SheerID link (PREFERRED method)
+    if "sheerid.com" in input_text.lower() or "verificationId=" in input_text:
         verification_id = MilitaryVerifier.parse_verification_id(input_text)
-        if not verification_id:
+        if verification_id:
+            is_token_mode = False
+            processing_msg = await update.message.reply_text(
+                f"🎖️ **ChatGPT Military Verification**\n\n"
+                f"✅ SheerID link detected!\n"
+                f"🆔 ID: `{verification_id[:20]}...`\n\n"
+                f"⏳ Starting verification process...\n"
+                f"💰 Will deduct {VERIFY_COST} points",
+                parse_mode="Markdown"
+            )
+    
+    # If not a link, try to extract access token
+    if not verification_id:
+        access_token = extract_access_token(input_text)
+        
+        if access_token:
+            is_token_mode = True
+            processing_msg = await update.message.reply_text(
+                "🎖️ **ChatGPT Military Verification**\n\n"
+                "🔑 Auth token detected!\n"
+                "⏳ Testing token validity...",
+                parse_mode="Markdown"
+            )
+            
+            # Quick token test first
+            token_valid = await asyncio.to_thread(test_token_quick, access_token)
+            
+            if not token_valid:
+                await processing_msg.edit_text(
+                    "❌ **Token appears to be invalid or expired**\n\n"
+                    "The token failed authentication check.\n\n"
+                    "**Please use the SheerID link method instead:**\n"
+                    "1. Go to https://chatgpt.com/veterans-claim\n"
+                    "2. Click 'Verify my status'\n"
+                    "3. Copy the URL from browser\n"
+                    "4. Use: `/verify6 <URL>`\n\n"
+                    "Or get a fresh token from:\n"
+                    "https://chatgpt.com/api/auth/session",
+                    parse_mode="Markdown"
+                )
+                return
+            
+            await processing_msg.edit_text(
+                "🎖️ **ChatGPT Military Verification**\n\n"
+                "✅ Token valid!\n"
+                "⏳ Creating verification ID...",
+                parse_mode="Markdown"
+            )
+            
+            # Create verification ID from token
+            verification_id = await asyncio.to_thread(
+                create_verification_from_token, access_token
+            )
+            
+            if not verification_id:
+                await processing_msg.edit_text(
+                    "❌ **Failed to create verification from token**\n\n"
+                    "🔒 ChatGPT API blocked the request.\n\n"
+                    "**Use the SheerID link method instead:**\n"
+                    "1. Go to https://chatgpt.com/veterans-claim\n"
+                    "2. Click 'Verify my status'\n"
+                    "3. When SheerID page opens, copy the URL\n"
+                    "4. Use: `/verify6 <URL>`\n\n"
+                    "**URL format:**\n"
+                    "`https://services.sheerid.com/verify/...?verificationId=...`",
+                    parse_mode="Markdown"
+                )
+                return
+            
+            await processing_msg.edit_text(
+                f"🎖️ **ChatGPT Military Verification**\n\n"
+                f"✅ Verification created from token!\n"
+                f"🆔 ID: `{verification_id[:20]}...`\n\n"
+                f"⏳ Starting verification process...",
+                parse_mode="Markdown"
+            )
+        else:
+            # Neither link nor token
             await update.message.reply_text(
-                "❌ Invalid input!\n\n"
-                "Please provide either:\n"
-                "• **AccessToken** from https://chatgpt.com/api/auth/session\n"
-                "• **SheerID link** starting with https://services.sheerid.com\n\n"
-                "Use `/verify6` without arguments for help.",
+                "❌ **Invalid input!**\n\n"
+                "Could not detect SheerID link or access token.\n\n"
+                "**Please provide one of:**\n"
+                "• SheerID link (recommended)\n"
+                "• Access token (starts with 'eyJ...')\n\n"
+                "Use `/verify6` for help.",
                 parse_mode="Markdown"
             )
             return
-        
-        processing_msg = await update.message.reply_text(
-            f"🎖️ Starting ChatGPT Military verification...\n"
-            f"🆔 Verification ID: `{verification_id[:20]}...`\n"
-            f"Deducted {VERIFY_COST} points\n\n"
-            "📋 Loading real veteran data from database...\n"
-            "🔄 Setting military status (VETERAN)...\n"
-            "📤 Submitting to SheerID...",
-            parse_mode="Markdown"
-        )
 
     # Deduct balance
     if not db.deduct_balance(user_id, VERIFY_COST):

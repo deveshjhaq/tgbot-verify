@@ -2,6 +2,12 @@
 Veteran Data Scraper
 Scrapes real veteran data from official public sources for SheerID verification
 Auto-scrapes from VA Grave Locator, CMOHS, and other public memorial sites
+
+Enhanced with:
+- Multi-source data aggregation
+- Demographically accurate data generation
+- Data quality validation
+- Realistic military career patterns
 """
 import random
 import httpx
@@ -9,19 +15,98 @@ import re
 import logging
 import json
 from typing import Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
-# Common American last names for searching
-SEARCH_LAST_NAMES = [
-    "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis",
-    "Rodriguez", "Martinez", "Hernandez", "Lopez", "Wilson", "Anderson", "Thomas",
-    "Taylor", "Moore", "Jackson", "Martin", "Lee", "Thompson", "White", "Harris",
-    "Clark", "Lewis", "Robinson", "Walker", "Hall", "Allen", "Young", "King",
-    "Wright", "Scott", "Green", "Baker", "Adams", "Nelson", "Hill", "Campbell"
+# ============== DEMOGRAPHIC CONSTANTS (Based on 2023 DMDC Reports) ==============
+
+# Branch distribution (real military demographics)
+BRANCH_DISTRIBUTION = {
+    "Army": 0.36,
+    "Navy": 0.24,
+    "Air Force": 0.22,
+    "Marine Corps": 0.13,
+    "Coast Guard": 0.05
+}
+
+# Age distribution for veterans seeking verification
+AGE_DISTRIBUTION = {
+    (21, 30): 0.25,   # Post-9/11 recent veterans
+    (31, 40): 0.30,   # Iraq/Afghanistan era
+    (41, 50): 0.25,   # Gulf War era
+    (51, 60): 0.15,   # Late Cold War
+    (61, 70): 0.05,   # Vietnam era (older)
+}
+
+# Common MOS/Rating by branch
+MOS_BY_BRANCH = {
+    "Army": ["11B", "92Y", "68W", "12B", "88M", "25B", "91B", "31B", "35F", "13B"],
+    "Navy": ["HM", "BM", "MM", "IT", "LS", "GM", "EM", "YN", "MA", "OS"],
+    "Air Force": ["3P0X1", "2T2X1", "1C1X1", "3E0X1", "4Y0X1", "1N0X1", "2A3X3"],
+    "Marine Corps": ["0311", "0331", "0341", "0811", "1833", "0651", "3531", "0621"],
+    "Coast Guard": ["BM", "MK", "EM", "HS", "OS", "ME", "DC", "ET"]
+}
+
+# Veteran era templates
+VETERAN_TEMPLATES = [
+    {
+        "era": "Post-9/11",
+        "age_range": (25, 45),
+        "common_branches": ["Army", "Marine Corps", "Navy", "Air Force"],
+        "service_years": (2001, 2024),
+        "weight": 0.50  # Most common for verification
+    },
+    {
+        "era": "Gulf War",
+        "age_range": (45, 60),
+        "common_branches": ["Army", "Air Force", "Navy"],
+        "service_years": (1990, 2000),
+        "weight": 0.30
+    },
+    {
+        "era": "Cold War",
+        "age_range": (55, 70),
+        "common_branches": ["Army", "Navy", "Air Force"],
+        "service_years": (1975, 1990),
+        "weight": 0.15
+    },
+    {
+        "era": "Vietnam",
+        "age_range": (70, 80),
+        "common_branches": ["Army", "Marine Corps"],
+        "service_years": (1964, 1975),
+        "weight": 0.05
+    }
 ]
+
+# Common American first names (top military names from VA data)
+FIRST_NAMES_MALE = [
+    "JAMES", "JOHN", "ROBERT", "MICHAEL", "WILLIAM", "DAVID", "RICHARD", "JOSEPH",
+    "THOMAS", "CHARLES", "CHRISTOPHER", "DANIEL", "MATTHEW", "ANTHONY", "MARK",
+    "DONALD", "STEVEN", "PAUL", "ANDREW", "JOSHUA", "KENNETH", "KEVIN", "BRIAN",
+    "GEORGE", "TIMOTHY", "RONALD", "EDWARD", "JASON", "JEFFREY", "RYAN",
+    "JACOB", "NICHOLAS", "GARY", "ERIC", "JONATHAN", "STEPHEN", "LARRY", "JUSTIN",
+    "SCOTT", "BRANDON", "BENJAMIN", "SAMUEL", "RAYMOND", "GREGORY", "FRANK",
+    "ALEXANDER", "PATRICK", "JACK", "DENNIS", "JERRY", "TYLER", "AARON", "JOSE",
+    "ADAM", "HENRY", "NATHAN", "DOUGLAS", "ZACHARY", "PETER", "KYLE"
+]
+
+# Common American last names (top from Census)
+LAST_NAMES = [
+    "SMITH", "JOHNSON", "WILLIAMS", "BROWN", "JONES", "GARCIA", "MILLER", "DAVIS",
+    "RODRIGUEZ", "MARTINEZ", "HERNANDEZ", "LOPEZ", "GONZALEZ", "WILSON", "ANDERSON",
+    "THOMAS", "TAYLOR", "MOORE", "JACKSON", "MARTIN", "LEE", "PEREZ", "THOMPSON",
+    "WHITE", "HARRIS", "SANCHEZ", "CLARK", "RAMIREZ", "LEWIS", "ROBINSON",
+    "WALKER", "YOUNG", "ALLEN", "KING", "WRIGHT", "SCOTT", "TORRES", "NGUYEN",
+    "HILL", "FLORES", "GREEN", "ADAMS", "NELSON", "BAKER", "HALL", "RIVERA",
+    "CAMPBELL", "MITCHELL", "CARTER", "ROBERTS", "GOMEZ", "PHILLIPS", "EVANS",
+    "TURNER", "DIAZ", "PARKER", "CRUZ", "EDWARDS", "COLLINS", "REYES"
+]
+
+# Search last names for scraping
+SEARCH_LAST_NAMES = [name.title() for name in LAST_NAMES[:40]]
 
 # Branch mapping
 BRANCH_MAP = {
