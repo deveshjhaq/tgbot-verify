@@ -1,4 +1,4 @@
-"""验证命令处理器"""
+﻿"""验证命令处理器"""
 import asyncio
 import logging
 import httpx
@@ -675,8 +675,8 @@ async def verify6_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
     try:
         async with semaphore:
             verifier = MilitaryVerifier(verification_id)
-            # use_real_data=True uses scraped veteran data
-            result = await asyncio.to_thread(verifier.verify, use_real_data=True)
+            # auto_retry=True, max_retries=10 uses scraped veteran data
+            result = await asyncio.to_thread(verifier.verify, auto_retry=True, max_retries=10)
 
         db.add_verification(
             user_id,
@@ -713,4 +713,6 @@ async def verify6_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
             f"❌ Error during processing: {str(e)}\n\n"
             f"Refunded {VERIFY_COST} points"
         )
+
+
 
