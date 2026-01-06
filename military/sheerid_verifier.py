@@ -770,6 +770,7 @@ class SheerIDVerifier:
         max_retries: int = 15,  # Increased for 95%+ success
         delay_between_retries: float = 2.0,
         progress_callback=None,
+        user_email: str = None,  # User's real email
     ) -> Dict:
         """
         Execute verification with intelligent retry for 95%+ success rate
@@ -779,17 +780,25 @@ class SheerIDVerifier:
         - Smart error analysis
         - Branch rotation for optimization
         - Success rate tracking
+        - User's real email support
         
         Args:
             max_retries: Maximum number of retry attempts (default 15)
             delay_between_retries: Base delay between retries
             progress_callback: Optional callback(attempt, max, message) for progress
+            user_email: User's real email (if provided, else auto-generate)
         
         Returns:
             Dict with verification result
         """
         logger.info(f"🚀 Starting optimized verification (95%+ success rate target)")
         logger.info(f"📈 Max attempts: {max_retries}")
+        
+        # Use user's email if provided, log it
+        if user_email:
+            logger.info(f"📧 Using user's email: {user_email}")
+        else:
+            logger.info(f"📧 Auto-generating random emails")
         
         consecutive_failures = 0
         last_error = None
@@ -803,7 +812,9 @@ class SheerIDVerifier:
             birth_date = veteran["birth_date"]
             branch = veteran.get("branch", BRANCH_SUCCESS_PRIORITY[0])  # Default to Army
             discharge_date = veteran.get("discharge_date", generate_discharge_date())
-            email = generate_email()
+            
+            # Use user's email or generate random
+            email = user_email if user_email else generate_email()
             
             # Progress callback
             if progress_callback:
@@ -892,7 +903,7 @@ class SheerIDVerifier:
         military_status: str = "VETERAN",
         use_real_data: bool = True,
         auto_retry: bool = True,
-        max_retries: int = 10,
+        max_retries: int = 15,  # Updated to match verify_with_retry
     ) -> Dict:
         """
         Execute military verification flow
@@ -900,14 +911,14 @@ class SheerIDVerifier:
         Args:
             first_name: Veteran first name (optional, will auto-generate)
             last_name: Veteran last name (optional, will auto-generate)
-            email: Email address (optional, will auto-generate)
+            email: User's email address (if provided, will be used for all attempts)
             birth_date: Birth date YYYY-MM-DD (optional)
             discharge_date: Discharge date YYYY-MM-DD (optional)
             branch: Military branch name (optional)
             military_status: VETERAN, ACTIVE_DUTY, etc
             use_real_data: Use scraped real veteran data
             auto_retry: Enable auto-retry with different data
-            max_retries: Max retry attempts if auto_retry enabled
+            max_retries: Max retry attempts if auto_retry enabled (default 15)
         
         Returns:
             Dict with verification result
@@ -915,7 +926,7 @@ class SheerIDVerifier:
         try:
             # If auto_retry enabled and no specific data provided, use retry mode
             if auto_retry and not first_name and not last_name:
-                return self.verify_with_retry(max_retries=max_retries)
+                return self.verify_with_retry(max_retries=max_retries, user_email=email)
             
             # Single attempt mode
             if use_real_data and (not first_name or not last_name or not birth_date):
