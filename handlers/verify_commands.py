@@ -618,3 +618,94 @@ async def getV4Code_command(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             f"❌ 查询过程中出现错误：{str(e)}\n\n"
             "请稍后重试或联系管理员。"
         )
+
+
+async def verify6_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db: Database):
+    """Handle /verify6 command - ChatGPT Military Verification"""
+    user_id = update.effective_user.id
+
+    if db.is_user_blocked(user_id):
+        await update.message.reply_text("You have been blocked from using this service.")
+        return
+
+    if not db.user_exists(user_id):
+        await update.message.reply_text("Please use /start to register first.")
+        return
+
+    if not context.args:
+        await update.message.reply_text(
+            "🎖️ **ChatGPT Military Verification**\n\n"
+            "Usage: `/verify6 <SheerID_link>`\n\n"
+            "Example:\n"
+            "`/verify6 https://services.sheerid.com/verify/xxx/?verificationId=yyy`\n\n"
+            "This verification is for US Military Veterans.",
+            parse_mode="Markdown"
+        )
+        return
+
+    url = context.args[0]
+    user = db.get_user(user_id)
+    if user["balance"] < VERIFY_COST:
+        await update.message.reply_text(
+            get_insufficient_balance_message(user["balance"])
+        )
+        return
+
+    # Parse verificationId
+    verification_id = MilitaryVerifier.parse_verification_id(url)
+    if not verification_id:
+        await update.message.reply_text("Invalid SheerID link, please check and try again.")
+        return
+
+    if not db.deduct_balance(user_id, VERIFY_COST):
+        await update.message.reply_text("Failed to deduct points, please try again later.")
+        return
+
+    processing_msg = await update.message.reply_text(
+        f"🎖️ Starting ChatGPT Military verification...\n"
+        f"Deducted {VERIFY_COST} points\n\n"
+        "📝 Generating veteran information...\n"
+        "🔄 Setting military status...\n"
+        "📤 Submitting personal info..."
+    )
+
+    # Use semaphore for concurrency control
+    semaphore = get_verification_semaphore("chatgpt_military")
+
+    try:
+        async with semaphore:
+            verifier = MilitaryVerifier(verification_id)
+            result = await asyncio.to_thread(verifier.verify)
+
+        db.add_verification(
+            user_id,
+            "chatgpt_military",
+            url,
+            "success" if result["success"] else "failed",
+            str(result),
+        )
+
+        if result["success"]:
+            result_msg = "✅ ChatGPT Military verification submitted!\n\n"
+            if result.get("pending"):
+                result_msg += "✨ Information submitted, awaiting SheerID review\n"
+                result_msg += "⏱️ Estimated review time: A few minutes\n\n"
+            if result.get("reward_code"):
+                result_msg += f"🎉 Reward Code: `{result['reward_code']}`\n\n"
+            if result.get("redirect_url"):
+                result_msg += f"🔗 Redirect link:\n{result['redirect_url']}"
+            await processing_msg.edit_text(result_msg, parse_mode="Markdown")
+        else:
+            db.add_balance(user_id, VERIFY_COST)
+            await processing_msg.edit_text(
+                f"❌ Verification failed: {result.get('message', 'Unknown error')}\n\n"
+                f"Refunded {VERIFY_COST} points"
+            )
+    except Exception as e:
+        logger.error("Military verification error: %s", e)
+        db.add_balance(user_id, VERIFY_COST)
+        await processing_msg.edit_text(
+            f"❌ Error during processing: {str(e)}\n\n"
+            f"Refunded {VERIFY_COST} points"
+        )
+
