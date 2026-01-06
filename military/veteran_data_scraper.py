@@ -455,9 +455,10 @@ FALLBACK_VETERANS = [
 ]
 
 _used_fallback = set()
+_used_generated = set()
 
 def get_fallback_veteran() -> Dict:
-    """Get fallback veteran data"""
+    """Get fallback veteran data from static list"""
     global _used_fallback
     
     for v in FALLBACK_VETERANS:
@@ -471,12 +472,257 @@ def get_fallback_veteran() -> Dict:
             result["source"] = "FALLBACK"
             return result
     
-    # All used, return random
-    v = random.choice(FALLBACK_VETERANS).copy()
-    discharge_year = random.randint(2020, 2025)
-    v["discharge_date"] = f"{discharge_year}-{random.randint(1,12):02d}-{random.randint(1,28):02d}"
-    v["source"] = "FALLBACK"
-    return v
+    # All used, generate new realistic data
+    logger.info("📊 Static fallback exhausted, generating realistic data...")
+    return get_generated_veteran()
+
+
+def get_generated_veteran() -> Dict:
+    """Generate new realistic veteran data using demographics"""
+    global _used_generated
+    
+    max_attempts = 50
+    for _ in range(max_attempts):
+        veteran = RealisticVeteranGenerator.generate()
+        key = f"{veteran['first_name']}|{veteran['last_name']}|{veteran['birth_date']}"
+        
+        if key not in _used_generated:
+            # Validate before using
+            is_valid, errors, warnings = DataQualityValidator.validate(veteran)
+            
+            if is_valid:
+                _used_generated.add(key)
+                score = DataQualityValidator.score_data(veteran)
+                logger.info(f"🎲 Generated: {veteran['first_name']} {veteran['last_name']} (Score: {score}/100)")
+                return veteran
+            else:
+                logger.debug(f"Generated data failed validation: {errors}")
+    
+    # Last resort - return any generated data
+    veteran = RealisticVeteranGenerator.generate()
+    veteran["source"] = "GENERATED_UNVALIDATED"
+    return veteran
+
+
+def get_best_veteran_data(preferred_branch: str = None) -> Dict:
+    """
+    Get the best available veteran data
+    Priority: Scraped > Fallback > Generated
+    """
+    scraper = get_scraper()
+    
+    # Try scraping first
+    veteran = scraper.get_fresh_veteran()
+    if veteran:
+        is_valid, errors, _ = DataQualityValidator.validate(veteran)
+        if is_valid:
+            score = DataQualityValidator.score_data(veteran)
+            if score >= 60:
+                logger.info(f"✅ Using scraped data (Score: {score})")
+                return veteran
+    
+    # Try fallback
+    veteran = get_fallback_veteran()
+    is_valid, errors, _ = DataQualityValidator.validate(veteran)
+    if is_valid:
+        score = DataQualityValidator.score_data(veteran)
+        if score >= 50:
+            logger.info(f"✅ Using fallback data (Score: {score})")
+            return veteran
+    
+    # Generate new data
+    for _ in range(5):
+        veteran = get_generated_veteran()
+        if preferred_branch and veteran.get("branch") != preferred_branch:
+            continue
+        
+        score = DataQualityValidator.score_data(veteran)
+        if score >= 70:
+            logger.info(f"✅ Using generated data (Score: {score})")
+            return veteran
+    
+    # Return whatever we have
+    return veteran
+
+
+# ============== REALISTIC VETERAN DATA GENERATOR ==============
+
+class RealisticVeteranGenerator:
+    """Generate synthetic veteran data based on real military demographics"""
+    
+    @staticmethod
+    def select_branch_weighted() -> str:
+        """Select branch based on actual military distribution"""
+        branches = list(BRANCH_DISTRIBUTION.keys())
+        weights = list(BRANCH_DISTRIBUTION.values())
+        return random.choices(branches, weights=weights)[0]
+    
+    @staticmethod
+    def select_age_weighted() -> int:
+        """Select age based on veteran verification demographics"""
+        age_ranges = list(AGE_DISTRIBUTION.keys())
+        weights = list(AGE_DISTRIBUTION.values())
+        selected_range = random.choices(age_ranges, weights=weights)[0]
+        return random.randint(selected_range[0], selected_range[1])
+    
+    @staticmethod
+    def select_era_weighted() -> Dict:
+        """Select veteran era based on verification patterns"""
+        eras = VETERAN_TEMPLATES
+        weights = [t["weight"] for t in eras]
+        return random.choices(eras, weights=weights)[0]
+    
+    @classmethod
+    def generate(cls) -> Dict:
+        """Generate demographically accurate veteran data"""
+        current_year = datetime.now().year
+        
+        # Select era first (determines age range and branch likelihood)
+        era = cls.select_era_weighted()
+        
+        # Select age within era's range
+        age = random.randint(era["age_range"][0], era["age_range"][1])
+        birth_year = current_year - age
+        
+        # Select branch (prefer era's common branches)
+        if random.random() < 0.7:  # 70% chance to use era-specific branch
+            branch = random.choice(era["common_branches"])
+        else:
+            branch = cls.select_branch_weighted()
+        
+        # Generate birth date
+        birth_month = random.randint(1, 12)
+        birth_day = random.randint(1, 28)
+        birth_date = f"{birth_year}-{birth_month:02d}-{birth_day:02d}"
+        
+        # Generate service dates
+        enlist_age = random.randint(18, 25)
+        service_start = birth_year + enlist_age
+        service_length = random.randint(4, 20)
+        service_end = min(service_start + service_length, current_year - 1)
+        
+        # Discharge date (recent for better success)
+        discharge_year = random.randint(max(2018, service_end - 2), min(2025, service_end + 1))
+        discharge_month = random.randint(1, 12)
+        discharge_day = random.randint(1, 28)
+        discharge_date = f"{discharge_year}-{discharge_month:02d}-{discharge_day:02d}"
+        
+        return {
+            "first_name": random.choice(FIRST_NAMES_MALE),
+            "last_name": random.choice(LAST_NAMES),
+            "birth_date": birth_date,
+            "branch": branch,
+            "discharge_date": discharge_date,
+            "era": era["era"],
+            "age": age,
+            "service_start": service_start,
+            "service_end": service_end,
+            "mos": random.choice(MOS_BY_BRANCH.get(branch, ["N/A"])),
+            "source": "GENERATED"
+        }
+
+
+class DataQualityValidator:
+    """Validate veteran data for realism and SheerID acceptance"""
+    
+    # SheerID age limits
+    MIN_AGE = 18
+    MAX_AGE = 90
+    OPTIMAL_MIN_AGE = 21
+    OPTIMAL_MAX_AGE = 65
+    
+    @classmethod
+    def validate(cls, data: Dict) -> tuple:
+        """
+        Validate veteran data
+        Returns: (is_valid, errors, warnings)
+        """
+        errors = []
+        warnings = []
+        current_year = datetime.now().year
+        
+        # Extract birth year
+        try:
+            birth_year = int(data['birth_date'].split('-')[0])
+            age = current_year - birth_year
+        except (KeyError, ValueError, IndexError):
+            errors.append("Invalid or missing birth_date")
+            age = 0
+        
+        # Age validation
+        if age < cls.MIN_AGE:
+            errors.append(f"Age {age} below minimum ({cls.MIN_AGE})")
+        elif age > cls.MAX_AGE:
+            errors.append(f"Age {age} above maximum ({cls.MAX_AGE})")
+        elif age < cls.OPTIMAL_MIN_AGE:
+            warnings.append(f"Age {age} below optimal ({cls.OPTIMAL_MIN_AGE})")
+        elif age > cls.OPTIMAL_MAX_AGE:
+            warnings.append(f"Age {age} above optimal ({cls.OPTIMAL_MAX_AGE})")
+        
+        # Branch validation
+        valid_branches = list(BRANCH_DISTRIBUTION.keys())
+        branch = data.get('branch', '')
+        if branch not in valid_branches:
+            errors.append(f"Invalid branch: {branch}")
+        
+        # Name validation
+        first_name = data.get('first_name', '')
+        last_name = data.get('last_name', '')
+        if len(first_name) < 2:
+            errors.append("First name too short")
+        if len(last_name) < 2:
+            errors.append("Last name too short")
+        if not first_name.isalpha():
+            warnings.append("First name contains non-alpha characters")
+        if not last_name.replace("-", "").replace("'", "").isalpha():
+            warnings.append("Last name contains unusual characters")
+        
+        # Discharge date validation
+        discharge_date = data.get('discharge_date', '')
+        if discharge_date:
+            try:
+                discharge_year = int(discharge_date.split('-')[0])
+                if discharge_year > current_year:
+                    warnings.append(f"Discharge year {discharge_year} is in the future")
+                if discharge_year < birth_year + 18:
+                    errors.append("Discharge before age 18")
+            except (ValueError, IndexError):
+                warnings.append("Could not parse discharge date")
+        
+        is_valid = len(errors) == 0
+        return is_valid, errors, warnings
+    
+    @classmethod
+    def score_data(cls, data: Dict) -> int:
+        """
+        Score data quality (0-100)
+        Higher = more likely to be accepted
+        """
+        score = 100
+        is_valid, errors, warnings = cls.validate(data)
+        
+        # Deduct for errors
+        score -= len(errors) * 25
+        
+        # Deduct for warnings
+        score -= len(warnings) * 10
+        
+        # Bonus for optimal age range
+        current_year = datetime.now().year
+        try:
+            birth_year = int(data['birth_date'].split('-')[0])
+            age = current_year - birth_year
+            if 25 <= age <= 55:  # Prime verification age
+                score += 10
+        except:
+            pass
+        
+        # Bonus for common branches
+        branch = data.get('branch', '')
+        if branch in ['Army', 'Marine Corps', 'Navy']:
+            score += 5
+        
+        return max(0, min(100, score))
 
 
 # Global scraper instance
@@ -520,17 +766,46 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     
     print("=" * 60)
-    print("Testing Veteran Data Auto-Scraper")
+    print("Testing Veteran Data System")
     print("=" * 60)
     
+    # Test realistic generator
+    print("\n🎲 Testing Realistic Generator...")
+    for i in range(3):
+        veteran = RealisticVeteranGenerator.generate()
+        is_valid, errors, warnings = DataQualityValidator.validate(veteran)
+        score = DataQualityValidator.score_data(veteran)
+        
+        print(f"\n{i+1}. {veteran['first_name']} {veteran['last_name']}")
+        print(f"   Branch: {veteran['branch']} | Era: {veteran.get('era', 'N/A')}")
+        print(f"   Birth: {veteran['birth_date']} (Age: {veteran.get('age', 'N/A')})")
+        print(f"   Discharge: {veteran['discharge_date']}")
+        print(f"   Valid: {'✅' if is_valid else '❌'} | Score: {score}/100")
+        if errors:
+            print(f"   Errors: {errors}")
+        if warnings:
+            print(f"   Warnings: {warnings}")
+    
+    # Test scraper
+    print("\n" + "=" * 60)
+    print("🔍 Testing Auto-Scraper...")
     scraper = VeteranDataScraper()
     
-    # Test scraping
-    print("\n🔍 Testing auto-scrape...")
     for i in range(3):
         veteran = scraper.get_veteran_auto()
+        score = DataQualityValidator.score_data(veteran)
         print(f"\n{i+1}. {veteran['first_name']} {veteran['last_name']}")
         print(f"   Branch: {veteran['branch']}")
         print(f"   Birth: {veteran['birth_date']}")
         print(f"   Discharge: {veteran['discharge_date']}")
-        print(f"   Source: {veteran.get('source', 'N/A')}")
+        print(f"   Source: {veteran.get('source', 'N/A')} | Score: {score}/100")
+    
+    # Test best veteran selector
+    print("\n" + "=" * 60)
+    print("🏆 Testing Best Veteran Selector...")
+    veteran = get_best_veteran_data()
+    score = DataQualityValidator.score_data(veteran)
+    print(f"\nBest: {veteran['first_name']} {veteran['last_name']}")
+    print(f"   Branch: {veteran['branch']}")
+    print(f"   Birth: {veteran['birth_date']}")
+    print(f"   Source: {veteran.get('source', 'N/A')} | Score: {score}/100")
