@@ -688,13 +688,16 @@ async def verify6_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
         
         if not verification_id:
             await processing_msg.edit_text(
-                "❌ Failed to create verification from token.\n\n"
-                "Possible reasons:\n"
-                "• Token expired (re-login to ChatGPT)\n"
-                "• Token invalid\n"
-                "• ChatGPT API error\n\n"
-                "Please get a fresh token from:\n"
-                "https://chatgpt.com/api/auth/session"
+                "❌ **Failed to create verification from token**\n\n"
+                "🔒 ChatGPT API is CloudFlare protected.\n\n"
+                "**Alternative Method:**\n"
+                "1. Go to https://chatgpt.com/veterans-claim\n"
+                "2. Click 'Verify my status'\n"
+                "3. Copy the SheerID link that opens\n"
+                "4. Use: `/verify6 <sheerid_link>`\n\n"
+                "**SheerID link format:**\n"
+                "`https://services.sheerid.com/verify/...?verificationId=...`",
+                parse_mode="Markdown"
             )
             return
         

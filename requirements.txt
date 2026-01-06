@@ -8,3 +8,5 @@ pymysql>=1.1.0
 psutil>=5.9.0
 python-dotenv>=1.0.0
 beautifulsoup4>=4.12.0
+cloudscraper>=1.2.71
+requests>=2.31.0

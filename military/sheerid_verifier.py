@@ -115,11 +115,28 @@ NO_RETRY_ERRORS = [
     "invalidLink",                # Bad link
 ]
 
+# Try to import cloudscraper for CloudFlare bypass
+try:
+    import cloudscraper
+    HAS_CLOUDSCRAPER = True
+    logger.info("✅ cloudscraper available for CloudFlare bypass")
+except ImportError:
+    HAS_CLOUDSCRAPER = False
+    logger.warning("⚠️ cloudscraper not installed - token mode may not work")
+
+# Try to import requests as fallback
+try:
+    import requests
+    HAS_REQUESTS = True
+except ImportError:
+    HAS_REQUESTS = False
+
 
 def create_verification_from_token(access_token: str, program_id: str = None) -> Optional[str]:
     """
     Create verification ID from ChatGPT accessToken
     Like ThanhNguyxn/veterans-verify-tool
+    Uses cloudscraper to bypass CloudFlare protection
     
     Args:
         access_token: ChatGPT Bearer token
@@ -131,49 +148,96 @@ def create_verification_from_token(access_token: str, program_id: str = None) ->
     if program_id is None:
         program_id = config.PROGRAM_ID
     
+    # Enhanced headers for ChatGPT API (CloudFlare bypass)
     headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "User-Agent": config.USER_AGENT,
-        "Origin": "https://chatgpt.com",
-        "Referer": "https://chatgpt.com/veterans-claim",
+        "sec-ch-ua": '"Chromium";v="131", "Google Chrome";v="131"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"Windows"',
+        "user-agent": config.USER_AGENT,
+        "accept": "application/json",
+        "content-type": "application/json",
+        "accept-language": "en-US,en;q=0.9",
+        "authorization": f"Bearer {access_token}",
+        "origin": "https://chatgpt.com",
+        "referer": "https://chatgpt.com/veterans-claim",
+        # Critical headers for Cloudflare bypass
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        # OpenAI specific headers
+        "oai-device-id": str(uuid.uuid4()),
+        "oai-language": "en-US",
     }
+    
+    url = f"{config.CHATGPT_API}/veterans/create_verification"
+    payload = {"program_id": program_id}
     
     try:
         logger.info("🔑 Creating verification from accessToken...")
+        logger.info(f"📡 POST {url}")
         
-        with httpx.Client(timeout=30.0) as client:
-            response = client.post(
-                f"{config.CHATGPT_API}/veterans/create_verification",
-                headers=headers,
-                json={"program_id": program_id}
+        # Try cloudscraper first (best for CloudFlare bypass)
+        if HAS_CLOUDSCRAPER:
+            logger.info("🛡️ Using cloudscraper for CloudFlare bypass...")
+            scraper = cloudscraper.create_scraper(
+                browser={
+                    'browser': 'chrome',
+                    'platform': 'windows',
+                    'mobile': False
+                }
             )
+            response = scraper.post(url, headers=headers, json=payload, timeout=30)
+            status_code = response.status_code
+            response_text = response.text
             
-            if response.status_code == 401:
-                logger.error("❌ 401 Unauthorized - accessToken expired or invalid")
-                return None
+        # Fallback to requests
+        elif HAS_REQUESTS:
+            logger.info("📦 Using requests...")
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            status_code = response.status_code
+            response_text = response.text
             
-            if response.status_code == 403:
-                logger.error("❌ 403 Forbidden - accessToken may be expired, login again")
-                return None
+        # Last resort: httpx
+        else:
+            logger.info("🔧 Using httpx...")
+            with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+                response = client.post(url, headers=headers, json=payload)
+                status_code = response.status_code
+                response_text = response.text
+        
+        logger.info(f"📥 Response status: {status_code}")
+        
+        if status_code == 401:
+            logger.error("❌ 401 Unauthorized - accessToken invalid or expired")
+            logger.error("   → Get new token from: https://chatgpt.com/api/auth/session")
+            return None
+        
+        if status_code == 403:
+            logger.error("❌ 403 Forbidden - CloudFlare blocked or token expired")
+            logger.error("   → Login again to https://chatgpt.com")
+            logger.error("   → Get new token from: https://chatgpt.com/api/auth/session")
+            return None
+        
+        if status_code != 200:
+            logger.error(f"❌ API error: {status_code}")
+            logger.error(f"   Response: {response_text[:500] if response_text else 'empty'}")
+            return None
+        
+        import json as json_module
+        data = json_module.loads(response_text)
+        verification_id = data.get("verification_id")
+        
+        if verification_id:
+            logger.info(f"✅ Created verification_id: {verification_id}")
+            return verification_id
+        else:
+            logger.error(f"❌ No verification_id in response: {data}")
+            return None
             
-            if response.status_code != 200:
-                logger.error(f"❌ API error: {response.status_code} - {response.text}")
-                return None
-            
-            data = response.json()
-            verification_id = data.get("verification_id")
-            
-            if verification_id:
-                logger.info(f"✅ Created verification_id: {verification_id}")
-                return verification_id
-            else:
-                logger.error(f"❌ No verification_id in response: {data}")
-                return None
-                
     except Exception as e:
         logger.error(f"❌ Error creating verification: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return None
 
 
