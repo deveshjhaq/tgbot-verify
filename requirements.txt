@@ -7,3 +7,4 @@ playwright==1.48.0
 pymysql>=1.1.0
 psutil>=5.9.0
 python-dotenv>=1.0.0
+beautifulsoup4>=4.12.0
