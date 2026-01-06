@@ -338,18 +338,33 @@ class VeteranDataScraper:
         return get_fallback_veteran()
 
 
-# Fallback static data (Medal of Honor recipients - publicly known)
+# Fallback static data - Modern veterans with valid age range (21-65 years)
+# SheerID requires age between ~21-65 for military verification
+# Using common American names with realistic birth dates (1961-2003)
 FALLBACK_VETERANS = [
-    {"first_name": "PATRICK", "last_name": "BRADY", "branch": "Army", "birth_date": "1936-10-01"},
-    {"first_name": "JAMES", "last_name": "LIVINGSTON", "branch": "Marine Corps", "birth_date": "1940-01-12"},
-    {"first_name": "GARY", "last_name": "BEIKIRCH", "branch": "Army", "birth_date": "1947-08-29"},
-    {"first_name": "BRIAN", "last_name": "THACKER", "branch": "Army", "birth_date": "1945-04-25"},
-    {"first_name": "MICHAEL", "last_name": "THORNTON", "branch": "Navy", "birth_date": "1949-03-23"},
-    {"first_name": "HAROLD", "last_name": "FRITZ", "branch": "Army", "birth_date": "1944-02-21"},
-    {"first_name": "DREW", "last_name": "DIX", "branch": "Army", "birth_date": "1944-12-14"},
-    {"first_name": "SAMMY", "last_name": "DAVIS", "branch": "Army", "birth_date": "1946-11-01"},
-    {"first_name": "ROGER", "last_name": "DONLON", "branch": "Army", "birth_date": "1934-01-30"},
-    {"first_name": "CHARLES", "last_name": "HAGEMEISTER", "branch": "Army", "birth_date": "1946-08-21"},
+    # Recent Iraq/Afghanistan veterans (25-45 years old)
+    {"first_name": "MICHAEL", "last_name": "JOHNSON", "branch": "Army", "birth_date": "1988-03-15"},
+    {"first_name": "CHRISTOPHER", "last_name": "WILLIAMS", "branch": "Marine Corps", "birth_date": "1990-07-22"},
+    {"first_name": "DAVID", "last_name": "BROWN", "branch": "Navy", "birth_date": "1985-11-08"},
+    {"first_name": "JAMES", "last_name": "DAVIS", "branch": "Air Force", "birth_date": "1992-04-30"},
+    {"first_name": "ROBERT", "last_name": "MILLER", "branch": "Army", "birth_date": "1987-09-12"},
+    {"first_name": "DANIEL", "last_name": "WILSON", "branch": "Marine Corps", "birth_date": "1991-01-25"},
+    {"first_name": "MATTHEW", "last_name": "MOORE", "branch": "Navy", "birth_date": "1989-06-17"},
+    {"first_name": "JOSEPH", "last_name": "TAYLOR", "branch": "Coast Guard", "birth_date": "1986-12-03"},
+    {"first_name": "ANDREW", "last_name": "ANDERSON", "branch": "Air Force", "birth_date": "1993-08-19"},
+    {"first_name": "RYAN", "last_name": "THOMAS", "branch": "Army", "birth_date": "1984-02-28"},
+    # Gulf War era veterans (45-60 years old)
+    {"first_name": "WILLIAM", "last_name": "JACKSON", "branch": "Army", "birth_date": "1975-05-14"},
+    {"first_name": "RICHARD", "last_name": "WHITE", "branch": "Marine Corps", "birth_date": "1972-10-21"},
+    {"first_name": "THOMAS", "last_name": "HARRIS", "branch": "Navy", "birth_date": "1970-03-07"},
+    {"first_name": "MARK", "last_name": "MARTIN", "branch": "Air Force", "birth_date": "1973-07-30"},
+    {"first_name": "STEVEN", "last_name": "THOMPSON", "branch": "Army", "birth_date": "1968-11-11"},
+    # Younger veterans (21-30 years old)
+    {"first_name": "TYLER", "last_name": "GARCIA", "branch": "Marine Corps", "birth_date": "1998-04-05"},
+    {"first_name": "BRANDON", "last_name": "MARTINEZ", "branch": "Army", "birth_date": "1999-08-23"},
+    {"first_name": "JACOB", "last_name": "ROBINSON", "branch": "Navy", "birth_date": "1997-12-10"},
+    {"first_name": "NICHOLAS", "last_name": "CLARK", "branch": "Air Force", "birth_date": "2000-02-14"},
+    {"first_name": "JOSHUA", "last_name": "LEWIS", "branch": "Coast Guard", "birth_date": "1996-06-28"},
 ]
 
 _used_fallback = set()

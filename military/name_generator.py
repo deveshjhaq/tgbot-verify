@@ -64,14 +64,15 @@ def generate_email(domain='gmail.com'):
     return f"{username}@{domain}"
 
 
-def generate_birth_date(min_age=30, max_age=75):
+def generate_birth_date(min_age=21, max_age=55):
     """
     Generate random birth date for veteran
-    Age range adjusted for realistic veteran demographics
+    SheerID requires age between ~21-65 years
+    Using 21-55 for optimal success rate
     
     Args:
-        min_age: Minimum age (default 30)
-        max_age: Maximum age (default 75 for living veterans)
+        min_age: Minimum age (default 21 - legal service age)
+        max_age: Maximum age (default 55 for active-era veterans)
     
     Returns:
         str: Birth date in YYYY-MM-DD format
