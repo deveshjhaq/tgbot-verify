@@ -438,24 +438,40 @@ class SheerIDVerifier:
     def _get_fresh_data(self) -> Dict:
         """Get fresh veteran data for retry (different from previous attempts)
         Uses global persistent cache to avoid reusing data across sessions
+        Enhanced with demographic-aware data generation
         """
-        from .veteran_data_scraper import get_veteran_for_verification
+        from .veteran_data_scraper import (
+            get_best_veteran_data,
+            get_generated_veteran,
+            DataQualityValidator
+        )
         
         # Get global used data (persistent across sessions)
         global_used = get_global_used_data()
         
-        max_attempts = 20
-        for _ in range(max_attempts):
-            veteran = get_veteran_for_verification()
+        max_attempts = 30
+        for attempt in range(max_attempts):
+            # First half: try best available data
+            if attempt < max_attempts // 2:
+                veteran = get_best_veteran_data()
+            else:
+                # Second half: generate new data
+                veteran = get_generated_veteran()
+            
             combo_key = f"{veteran['first_name']}|{veteran['last_name']}|{veteran['birth_date']}"
             
             # Check both local session and global persistent cache
             if combo_key not in self.used_combinations and combo_key not in global_used:
-                self.used_combinations.add(combo_key)
-                return veteran
+                # Validate quality
+                is_valid, errors, _ = DataQualityValidator.validate(veteran)
+                if is_valid:
+                    score = DataQualityValidator.score_data(veteran)
+                    logger.info(f"📊 Data quality score: {score}/100 ({veteran.get('source', 'unknown')})")
+                    self.used_combinations.add(combo_key)
+                    return veteran
         
-        # If all cached data exhausted, generate random
-        logger.warning("⚠️ All cached data used, generating random data")
+        # If all cached data exhausted, generate random with logging
+        logger.warning("⚠️ All cached data used, generating new random data")
         name = NameGenerator.generate()
         return {
             "first_name": name["first_name"],
