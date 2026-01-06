@@ -43,8 +43,13 @@ class SheerIDVerifier:
     @staticmethod
     def parse_verification_id(url: str) -> Optional[str]:
         """Parse verificationId from URL"""
-        # Support both formats: verificationId=xxx and verify/xxx
-        match = re.search(r"(?:verificationId=|verify/)([a-f0-9]+)", url, re.IGNORECASE)
+        # First try to match verificationId parameter (priority)
+        match = re.search(r"verificationId=([a-f0-9]+)", url, re.IGNORECASE)
+        if match:
+            return match.group(1)
+        # Fallback: try to match verify/xxx (but not program ID)
+        # Only use this if no verificationId parameter found
+        match = re.search(r"verify/([a-f0-9]{24,})(?:\?|$)", url, re.IGNORECASE)
         if match:
             return match.group(1)
         return None
