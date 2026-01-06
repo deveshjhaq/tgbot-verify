@@ -664,9 +664,9 @@ async def verify6_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
     processing_msg = await update.message.reply_text(
         f"🎖️ Starting ChatGPT Military verification...\n"
         f"Deducted {VERIFY_COST} points\n\n"
-        "📝 Generating veteran information...\n"
-        "🔄 Setting military status...\n"
-        "📤 Submitting personal info..."
+        "� Loading real veteran data from database...\n"
+        "🔄 Setting military status (VETERAN)...\n"
+        "📤 Submitting to SheerID..."
     )
 
     # Use semaphore for concurrency control
@@ -675,7 +675,8 @@ async def verify6_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
     try:
         async with semaphore:
             verifier = MilitaryVerifier(verification_id)
-            result = await asyncio.to_thread(verifier.verify)
+            # use_real_data=True uses scraped veteran data
+            result = await asyncio.to_thread(verifier.verify, use_real_data=True)
 
         db.add_verification(
             user_id,

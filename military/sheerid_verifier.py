@@ -102,14 +102,26 @@ class SheerIDVerifier:
         discharge_date: str = None,
         branch: str = None,
         military_status: str = "VETERAN",
+        use_real_data: bool = True,
     ) -> Dict:
-        """Execute military verification flow - Enhanced version"""
+        """Execute military verification flow - Enhanced version with real data"""
         try:
-            # Generate random info if not provided
-            if not first_name or not last_name:
-                name = NameGenerator.generate()
-                first_name = name["first_name"]
-                last_name = name["last_name"]
+            # Use real veteran data from scraper if not provided
+            if use_real_data and (not first_name or not last_name or not birth_date):
+                from .veteran_data_scraper import get_veteran_for_verification
+                veteran = get_veteran_for_verification()
+                first_name = first_name or veteran["first_name"]
+                last_name = last_name or veteran["last_name"]
+                birth_date = birth_date or veteran["birth_date"]
+                branch = branch or veteran["branch"]
+                discharge_date = discharge_date or veteran["discharge_date"]
+                logger.info("📋 Using real veteran data from database")
+            else:
+                # Fallback to random generation
+                if not first_name or not last_name:
+                    name = NameGenerator.generate()
+                    first_name = name["first_name"]
+                    last_name = name["last_name"]
 
             # Get random branch if not provided
             if not branch:

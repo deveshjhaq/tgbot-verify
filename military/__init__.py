@@ -12,6 +12,11 @@ from .name_generator import (
     generate_newrelic_headers,
     get_random_branch
 )
+from .veteran_data_scraper import (
+    get_real_veteran_data,
+    get_veteran_for_verification,
+    VeteranDataScraper
+)
 from . import config
 
 __all__ = [
@@ -23,6 +28,9 @@ __all__ = [
     'generate_fingerprint',
     'generate_newrelic_headers',
     'get_random_branch',
+    'get_real_veteran_data',
+    'get_veteran_for_verification',
+    'VeteranDataScraper',
     'config'
 ]
 
