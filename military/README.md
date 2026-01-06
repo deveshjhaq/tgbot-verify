@@ -182,3 +182,42 @@ Available military organization options:
 - [x] Handle metadata information
 - [x] Integrate into main bot command system (`/verify6`)
 
+---
+
+## 🎯 Verification Tips
+
+### What SheerID Actually Verifies
+According to community research, SheerID only verifies:
+- **Branch** (Army, Navy, etc.)
+- **Name** (First Name, Last Name)
+- **Birth Date**
+
+**Discharge date is NOT strictly verified** - you can use any date in 2025.
+
+### Finding Veteran Data Sources
+
+**Method 1: AI Search (Lower Success Rate)**
+- Use ChatGPT/Grok/Gemini to search for public veteran information
+- Search for living US veterans with name, branch, and birth date
+- Cross-verify with Google search
+
+**Method 2: Official Memorial Websites (Higher Success Rate)**
+- VA Grave Locator: https://gravelocator.cem.va.gov/ngl/
+- Arlington Cemetery: https://ancexplorer.army.mil/publicwmv/
+- Medal of Honor Recipients: https://www.cmohs.org/recipients/
+- Veterans Legacy Memorial: https://www.vlm.cem.va.gov/
+
+### Common Errors
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `Not approved` | Data not found in DoD database OR IP blocked | Change IP, verify data accuracy |
+| `Verification Limit Exceeded` | Data already used by others | Try different veteran data |
+| `docUpload` | Auto-verification failed | Data not in DoD/DEERS database |
+
+### Best Practices
+1. Use a clean/residential IP (not datacenter)
+2. Select "VETERAN" status (not Active Duty)
+3. Set discharge date to 2025
+4. Verify data accuracy before submission
+

@@ -64,13 +64,14 @@ def generate_email(domain='gmail.com'):
     return f"{username}@{domain}"
 
 
-def generate_birth_date(min_age=25, max_age=55):
+def generate_birth_date(min_age=30, max_age=75):
     """
     Generate random birth date for veteran
+    Age range adjusted for realistic veteran demographics
     
     Args:
-        min_age: Minimum age
-        max_age: Maximum age
+        min_age: Minimum age (default 30)
+        max_age: Maximum age (default 75 for living veterans)
     
     Returns:
         str: Birth date in YYYY-MM-DD format
@@ -87,22 +88,19 @@ def generate_birth_date(min_age=25, max_age=55):
 
 def generate_discharge_date():
     """
-    Generate random discharge date for veteran
-    Optimized for SheerID: within 12 months for better auto-approval
+    Generate discharge date for veteran verification
+    According to SheerID guide: discharge date can be any date in 2025
+    SheerID only verifies: name, branch, birth date (not discharge date)
     
     Returns:
-        str: Discharge date in YYYY-MM-DD format
+        str: Discharge date in YYYY-MM-DD format (2025)
     """
-    today = datetime.now()
-    # Generate date within last 11 months (for better success rate)
-    # SheerID targets veterans discharged within 12 months
-    min_days_ago = 30  # At least 1 month ago
-    max_days_ago = 330  # Less than 11 months ago
+    # Use 2025 dates for better success rate
+    # SheerID doesn't strictly verify discharge date
+    month = random.randint(1, 6)  # First half of 2025
+    day = random.randint(1, 28)
     
-    random_days = random.randint(min_days_ago, max_days_ago)
-    discharge_date = today - timedelta(days=random_days)
-    
-    return discharge_date.strftime('%Y-%m-%d')
+    return f"2025-{month:02d}-{day:02d}"
 
 
 def generate_fingerprint():
