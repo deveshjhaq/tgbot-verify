@@ -90,18 +90,19 @@ def generate_birth_date(min_age=21, max_age=55):
 def generate_discharge_date():
     """
     Generate discharge date for veteran verification
-    According to SheerID guide: discharge date can be any date in 2025
     SheerID only verifies: name, branch, birth date (not discharge date)
+    Using recent past dates (2020-2025) for realistic veterans
     
     Returns:
-        str: Discharge date in YYYY-MM-DD format (2025)
+        str: Discharge date in YYYY-MM-DD format
     """
-    # Use 2025 dates for better success rate
+    # Use recent discharge dates (2020-2025)
     # SheerID doesn't strictly verify discharge date
-    month = random.randint(1, 6)  # First half of 2025
+    year = random.randint(2020, 2025)
+    month = random.randint(1, 12)
     day = random.randint(1, 28)
     
-    return f"2025-{month:02d}-{day:02d}"
+    return f"{year}-{month:02d}-{day:02d}"
 
 
 def generate_fingerprint():

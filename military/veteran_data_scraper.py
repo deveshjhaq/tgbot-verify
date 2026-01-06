@@ -306,8 +306,9 @@ class VeteranDataScraper:
                 key = f"{v['first_name']}|{v['last_name']}|{v['birth_date']}"
                 if key not in self.used_data:
                     self.used_data.add(key)
-                    # Add discharge date
-                    v["discharge_date"] = f"2025-{random.randint(1,6):02d}-{random.randint(1,28):02d}"
+                    # Add discharge date (recent past - 2020-2025)
+                    discharge_year = random.randint(2020, 2025)
+                    v["discharge_date"] = f"{discharge_year}-{random.randint(1,12):02d}-{random.randint(1,28):02d}"
                     return v
         
         return None
@@ -329,7 +330,8 @@ class VeteranDataScraper:
                 key = f"{v['first_name']}|{v['last_name']}|{v['birth_date']}"
                 if key not in self.used_data:
                     self.used_data.add(key)
-                    v["discharge_date"] = f"2025-{random.randint(1,6):02d}-{random.randint(1,28):02d}"
+                    discharge_year = random.randint(2020, 2025)
+                    v["discharge_date"] = f"{discharge_year}-{random.randint(1,12):02d}-{random.randint(1,28):02d}"
                     logger.info(f"📦 From cache: {v['first_name']} {v['last_name']}")
                     return v
         
@@ -378,13 +380,16 @@ def get_fallback_veteran() -> Dict:
         if key not in _used_fallback:
             _used_fallback.add(key)
             result = v.copy()
-            result["discharge_date"] = f"2025-{random.randint(1,6):02d}-{random.randint(1,28):02d}"
+            # Recent discharge (2020-2025)
+            discharge_year = random.randint(2020, 2025)
+            result["discharge_date"] = f"{discharge_year}-{random.randint(1,12):02d}-{random.randint(1,28):02d}"
             result["source"] = "FALLBACK"
             return result
     
     # All used, return random
     v = random.choice(FALLBACK_VETERANS).copy()
-    v["discharge_date"] = f"2025-{random.randint(1,6):02d}-{random.randint(1,28):02d}"
+    discharge_year = random.randint(2020, 2025)
+    v["discharge_date"] = f"{discharge_year}-{random.randint(1,12):02d}-{random.randint(1,28):02d}"
     v["source"] = "FALLBACK"
     return v
 
