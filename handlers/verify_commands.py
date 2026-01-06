@@ -630,9 +630,13 @@ async def verify6_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
     """Handle /verify6 command - ChatGPT Military Verification
     
     Supports multiple modes:
-    1. SheerID Link mode: /verify6 <sheerid_link> (RECOMMENDED - most reliable)
-    2. Auth Token mode: /verify6 <accessToken> (may fail due to CloudFlare)
+    1. SheerID Link mode: /verify6 <sheerid_link> [email] (RECOMMENDED - most reliable)
+    2. Auth Token mode: /verify6 <accessToken> [email] (may fail due to CloudFlare)
     3. Diagnostic mode: /verify6 test <token> (test if token works)
+    
+    Optional email parameter:
+    - If provided, your email will be used (you'll receive verification link)
+    - If omitted, random email will be generated
     """
     user_id = update.effective_user.id
 
@@ -648,13 +652,16 @@ async def verify6_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
         await update.message.reply_text(
             "🎖️ **ChatGPT Military Verification**\n\n"
             "**Method 1 (RECOMMENDED):** SheerID Link\n"
-            "```\n/verify6 <SheerID_link>\n```\n\n"
+            "```\n/verify6 <SheerID_link> [email]\n```\n\n"
             "**How to get SheerID link:**\n"
             "1. Go to https://chatgpt.com/veterans-claim\n"
             "2. Click 'Verify my status'\n"
             "3. Copy URL from browser (starts with services.sheerid.com)\n\n"
+            "**With Your Email:**\n"
+            "```\n/verify6 <link> yourname@gmail.com\n```\n"
+            "✅ You'll receive verification link in your inbox\n\n"
             "**Method 2:** Auth Token (may not work)\n"
-            "```\n/verify6 <accessToken>\n```\n\n"
+            "```\n/verify6 <accessToken> [email]\n```\n\n"
             "**Test Token:**\n"
             "```\n/verify6 test <accessToken>\n```\n\n"
             "This verification is for US Military Veterans.",
@@ -713,6 +720,19 @@ async def verify6_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
             get_insufficient_balance_message(user["balance"])
         )
         return
+
+    # Extract email if provided (check for email pattern)
+    user_email = None
+    args_to_process = list(context.args)
+    
+    # Check last argument for email pattern
+    if len(args_to_process) > 1:
+        potential_email = args_to_process[-1]
+        if '@' in potential_email and '.' in potential_email:
+            user_email = potential_email
+            args_to_process = args_to_process[:-1]  # Remove email from args
+            input_text = " ".join(args_to_process)
+            logger.info(f"User provided email: {user_email}")
 
     verification_id = None
     is_token_mode = False
@@ -818,10 +838,24 @@ async def verify6_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
     semaphore = get_verification_semaphore("chatgpt_military")
 
     try:
+        # Update message to show email info
+        if user_email:
+            await processing_msg.edit_text(
+                f"{processing_msg.text}\n\n"
+                f"📧 Using your email: `{user_email}`\n"
+                f"✉️ You'll receive verification link in inbox",
+                parse_mode="Markdown"
+            )
+        
         async with semaphore:
             verifier = MilitaryVerifier(verification_id)
-            # auto_retry=True, max_retries=10 uses scraped veteran data
-            result = await asyncio.to_thread(verifier.verify, auto_retry=True, max_retries=10)
+            # Pass user_email to verification (will use for all attempts)
+            result = await asyncio.to_thread(
+                verifier.verify, 
+                auto_retry=True, 
+                max_retries=15,  # Updated to match new default
+                email=user_email
+            )
 
         db.add_verification(
             user_id,
@@ -835,15 +869,21 @@ async def verify6_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
             result_msg = "✅ ChatGPT Military verification submitted!\n\n"
             if is_token_mode:
                 result_msg += "🔑 Mode: Auth Token\n"
+            if user_email:
+                result_msg += f"📧 Email: {user_email}\n"
             if result.get("veteran_name"):
                 result_msg += f"👤 Veteran: {result['veteran_name']}\n"
             if result.get("branch"):
                 result_msg += f"🏛️ Branch: {result['branch']}\n"
             if result.get("attempts"):
                 result_msg += f"🔄 Attempts: {result['attempts']}\n"
+            if result.get("success_rate"):
+                result_msg += f"📊 Success Rate: {result['success_rate']:.1f}%\n"
             if result.get("pending"):
                 result_msg += "\n✨ Information submitted, awaiting SheerID review\n"
                 result_msg += "⏱️ Estimated review time: A few minutes\n"
+                if user_email:
+                    result_msg += f"📬 Check your inbox: {user_email}\n"
             if result.get("reward_code"):
                 result_msg += f"\n🎉 Reward Code: `{result['reward_code']}`\n"
             if result.get("redirect_url"):
