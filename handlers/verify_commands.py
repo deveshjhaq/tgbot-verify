@@ -687,13 +687,17 @@ async def verify6_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
 
         if result["success"]:
             result_msg = "✅ ChatGPT Military verification submitted!\n\n"
+            if result.get("veteran_name"):
+                result_msg += f"👤 Veteran: {result['veteran_name']}\n"
+            if result.get("branch"):
+                result_msg += f"🏛️ Branch: {result['branch']}\n"
             if result.get("pending"):
-                result_msg += "✨ Information submitted, awaiting SheerID review\n"
-                result_msg += "⏱️ Estimated review time: A few minutes\n\n"
+                result_msg += "\n✨ Information submitted, awaiting SheerID review\n"
+                result_msg += "⏱️ Estimated review time: A few minutes\n"
             if result.get("reward_code"):
-                result_msg += f"🎉 Reward Code: `{result['reward_code']}`\n\n"
+                result_msg += f"\n🎉 Reward Code: `{result['reward_code']}`\n"
             if result.get("redirect_url"):
-                result_msg += f"🔗 Redirect link:\n{result['redirect_url']}"
+                result_msg += f"\n🔗 Redirect link:\n{result['redirect_url']}"
             await processing_msg.edit_text(result_msg, parse_mode="Markdown")
         else:
             db.add_balance(user_id, VERIFY_COST)
