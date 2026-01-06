@@ -31,6 +31,7 @@ A Python-based Telegram bot that automates SheerID student/teacher identity veri
 | `/verify3` | Spotify Student | Student | ✅ Complete | Spotify Student Subscription Discount |
 | `/verify4` | Bolt.new Teacher | Teacher | ✅ Complete | Bolt.new Education Discount (Auto code retrieval) |
 | `/verify5` | YouTube Premium Student | Student | ⚠️ Beta | YouTube Premium Student Discount (See notes below) |
+| `/verify6` | ChatGPT Military | Veteran | ✅ Complete | OpenAI ChatGPT Military Discount |
 
 > **⚠️ YouTube Verification Special Notes**:
 > 
@@ -49,9 +50,9 @@ A Python-based Telegram bot that automates SheerID student/teacher identity veri
 > 5. Manually construct link: `https://services.sheerid.com/verify/{programId}/?verificationId={verificationId}`
 > 6. Submit the link using `/verify5` command
 
-> **💡 ChatGPT Military Verification Approach**:
+> **🎖️ ChatGPT Military Verification**:
 > 
-> This project provides implementation approach and API documentation for ChatGPT Military SheerID verification. The military verification process differs from regular student/teacher verification, requiring an initial `collectMilitaryStatus` API call to set military status before submitting personal information. For detailed implementation approach and API documentation, please refer to [`military/README.md`](military/README.md). Users can integrate this into the bot based on the documentation.
+> Military verification (`/verify6`) is now fully implemented! It supports US Military Veterans verification for ChatGPT. The verification process automatically sets military status and submits veteran personal information. For API details, see [`military/README.md`](military/README.md).
 
 ### ✨ Key Features
 

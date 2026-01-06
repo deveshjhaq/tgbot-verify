@@ -172,13 +172,13 @@ Available military organization options:
 
 ---
 
-## 📝 Features To Be Implemented
+## 📝 Implementation Status
 
-- [ ] Implement `collectMilitaryStatus` API call
-- [ ] Implement `collectInactiveMilitaryPersonalInfo` API call
-- [ ] Add military organization selection logic
-- [ ] Generate required personal information (name, birth date, email, etc.)
-- [ ] Generate discharge date (needs reasonable time range)
-- [ ] Handle metadata information (extract from original request or construct)
-- [ ] Integrate into main bot command system (e.g., `/verify6`)
+- [x] Implement `collectMilitaryStatus` API call
+- [x] Implement `collectInactiveMilitaryPersonalInfo` API call
+- [x] Add military organization selection logic
+- [x] Generate required personal information (name, birth date, email, etc.)
+- [x] Generate discharge date (reasonable time range)
+- [x] Handle metadata information
+- [x] Integrate into main bot command system (`/verify6`)
 
