@@ -6,6 +6,9 @@ SHEERID_BASE_URL = 'https://services.sheerid.com'
 SHEERID_API = 'https://services.sheerid.com/rest/v2'
 MY_SHEERID_URL = 'https://my.sheerid.com'
 
+# ChatGPT API Configuration
+CHATGPT_API = 'https://chatgpt.com/backend-api'
+
 # ChatGPT Veterans Program ID
 PROGRAM_ID = '690415d58971e73ca187d8c9'
 

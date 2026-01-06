@@ -116,6 +116,103 @@ NO_RETRY_ERRORS = [
 ]
 
 
+def create_verification_from_token(access_token: str, program_id: str = None) -> Optional[str]:
+    """
+    Create verification ID from ChatGPT accessToken
+    Like ThanhNguyxn/veterans-verify-tool
+    
+    Args:
+        access_token: ChatGPT Bearer token
+        program_id: Optional program ID (defaults to config.PROGRAM_ID)
+    
+    Returns:
+        verification_id if successful, None otherwise
+    """
+    if program_id is None:
+        program_id = config.PROGRAM_ID
+    
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": config.USER_AGENT,
+        "Origin": "https://chatgpt.com",
+        "Referer": "https://chatgpt.com/veterans-claim",
+    }
+    
+    try:
+        logger.info("🔑 Creating verification from accessToken...")
+        
+        with httpx.Client(timeout=30.0) as client:
+            response = client.post(
+                f"{config.CHATGPT_API}/veterans/create_verification",
+                headers=headers,
+                json={"program_id": program_id}
+            )
+            
+            if response.status_code == 401:
+                logger.error("❌ 401 Unauthorized - accessToken expired or invalid")
+                return None
+            
+            if response.status_code == 403:
+                logger.error("❌ 403 Forbidden - accessToken may be expired, login again")
+                return None
+            
+            if response.status_code != 200:
+                logger.error(f"❌ API error: {response.status_code} - {response.text}")
+                return None
+            
+            data = response.json()
+            verification_id = data.get("verification_id")
+            
+            if verification_id:
+                logger.info(f"✅ Created verification_id: {verification_id}")
+                return verification_id
+            else:
+                logger.error(f"❌ No verification_id in response: {data}")
+                return None
+                
+    except Exception as e:
+        logger.error(f"❌ Error creating verification: {e}")
+        return None
+
+
+def extract_access_token(input_str: str) -> Optional[str]:
+    """
+    Extract accessToken from various input formats:
+    - Direct token string
+    - JSON object with accessToken field
+    - URL with token parameter
+    """
+    import json
+    
+    input_str = input_str.strip()
+    
+    # Try to parse as JSON
+    if input_str.startswith("{"):
+        try:
+            data = json.loads(input_str)
+            # Look for accessToken in various places
+            if "accessToken" in data:
+                return data["accessToken"]
+            if "access_token" in data:
+                return data["access_token"]
+        except json.JSONDecodeError:
+            pass
+    
+    # Check if it's a JWT token directly (starts with eyJ)
+    if input_str.startswith("eyJ"):
+        return input_str
+    
+    # Try to extract from URL parameter
+    import re
+    match = re.search(r'accessToken[=:]([^&\s"]+)', input_str)
+    if match:
+        return match.group(1)
+    
+    return None
+
+
 class SheerIDVerifier:
     """SheerID Military Identity Verifier - Enhanced Version with Auto-Retry"""
 
